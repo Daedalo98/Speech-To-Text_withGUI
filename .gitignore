@@ -1,0 +1,28 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# VSCode
+.vscode/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test / coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Vosk models (you may store them outside the repo; this is a safety net)
+models/
+
