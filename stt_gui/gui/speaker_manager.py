@@ -193,6 +193,23 @@ class SpeakerManager(tk.Frame):
         color = next(self._color_cycle)
         self._add_speaker(name, color)
 
+    def _on_add_speaker_clicked_with_name(self, name: str) -> None:
+        """
+        Add a new speaker with a provided name (programmatically).
+        
+        :param name: Speaker name to add.
+        """
+        if name in self._speakers:
+            messagebox.showerror(
+                "Duplicate Speaker",
+                f"A speaker named '{name}' already exists.",
+                parent=self,
+            )
+            return
+
+        color = next(self._color_cycle)
+        self._add_speaker(name, color)
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

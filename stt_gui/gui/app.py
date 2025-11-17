@@ -192,19 +192,30 @@ class SpeechToTextApp(tk.Frame):
         """
         Start audio capture and STT processing, asynchronously.
 
-        - Ensure at least one speaker exists.
+        - Ensure at least one speaker exists (create if needed).
         - Ensure the first speaker is active by default.
         - Show "Wait, starting..." while Vosk model loads.
         """
         # Ensure at least one speaker is defined.
         speakers = self.speaker_manager.get_speakers()
         if not speakers:
-            messagebox.showwarning(
-                "No speakers",
-                "Please add at least one speaker before starting transcription.",
+            # Prompt user to create a speaker
+            from tkinter import simpledialog
+            speaker_name = simpledialog.askstring(
+                "Create Speaker",
+                "No speakers found. Please enter a speaker name:",
                 parent=self,
             )
-            return
+            if not speaker_name:
+                return
+            
+            # Add the speaker programmatically
+            self.speaker_manager._on_add_speaker_clicked_with_name(speaker_name)
+            speakers = self.speaker_manager.get_speakers()
+            
+            if not speakers:
+                # Should not happen, but just in case
+                return
 
         # NEW BEHAVIOR: when starting, set by default the first speaker,
         # if none is currently active.
