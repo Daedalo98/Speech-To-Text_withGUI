@@ -367,12 +367,18 @@ class SpeechToTextApp(tk.Frame):
           "transcript": [...],
           "notes": [...]
         }
+        
+        The transcript groups consecutive sentences by the same speaker,
+        combining their timestamps and detecting pauses between them.
         """
         # Speakers: from SpeakerManager.
         speakers = self.speaker_manager.get_all_speakers()
 
         # Transcript sentences: from TranscriptionPanel.
-        transcript = self.transcription_panel.get_sentences()
+        raw_transcript = self.transcription_panel.get_sentences()
+        
+        # Group consecutive sentences by speaker and merge timestamps.
+        transcript = self._merge_consecutive_sentences(raw_transcript)
 
         # Notes: from NotesPanel.
         notes = self.notes_panel.get_notes()
@@ -387,6 +393,136 @@ class SpeechToTextApp(tk.Frame):
             "transcript": transcript,
             "notes": notes,
         }
+
+    def _merge_consecutive_sentences(self, sentences: list) -> list:
+        """
+        Group consecutive sentences by speaker and merge timestamps.
+        
+        For consecutive sentences from the same speaker:
+        - Combine all text into a single entry
+        - Use the first sentence's start time and last sentence's end time
+        - Insert pause indicators [pause duration (s)] between sentences
+        
+        :param sentences: List of sentence dicts from get_sentences()
+        :return: List of merged sentence dicts
+        """
+        if not sentences:
+            return []
+        
+        merged = []
+        current_group = None
+        
+        for sentence in sentences:
+            speaker = sentence.get("speaker")
+            timestamp = sentence.get("timestamp", "")
+            text = sentence.get("text", "")
+            
+            # Parse timestamp to extract start and end times
+            times = self._parse_timestamp(timestamp)
+            
+            if current_group is None or current_group["speaker"] != speaker:
+                # Start a new group
+                if current_group is not None:
+                    merged.append(current_group)
+                
+                current_group = {
+                    "speaker": speaker,
+                    "timestamp": timestamp,
+                    "text": text,
+                    "start_time": times["start"],
+                    "end_time": times["end"],
+                    "texts": [text],  # Keep track of individual texts for pause detection
+                    "times": [times],  # Keep track of individual timestamps
+                }
+            else:
+                # Same speaker - merge
+                previous_end = current_group["end_time"]
+                current_start = times["start"]
+                
+                # Calculate pause duration
+                if previous_end is not None and current_start is not None:
+                    pause_duration = current_start - previous_end
+                    if pause_duration > 0:
+                        # Add pause indicator
+                        current_group["texts"].append(f"[pause {pause_duration:.1f}s]")
+                
+                # Add new text
+                current_group["texts"].append(text)
+                current_group["times"].append(times)
+                
+                # Update end time
+                current_group["end_time"] = times["end"]
+                current_group["timestamp"] = f"{self._format_time(current_group['start_time'])}-{self._format_time(current_group['end_time'])}"
+        
+        # Don't forget the last group
+        if current_group is not None:
+            # Merge all texts for the final entry
+            current_group["text"] = " ".join(current_group["texts"])
+            del current_group["texts"]
+            del current_group["times"]
+            del current_group["start_time"]
+            del current_group["end_time"]
+            merged.append(current_group)
+        
+        return merged
+
+    def _parse_timestamp(self, timestamp_str: str) -> dict:
+        """
+        Parse a timestamp string in format "HH:MM:SS.mmm-HH:MM:SS.mmm"
+        and return a dict with start and end times as floats (seconds since midnight).
+        
+        :param timestamp_str: Timestamp string
+        :return: Dict with "start" and "end" keys (float values or None)
+        """
+        try:
+            parts = timestamp_str.split("-")
+            if len(parts) != 2:
+                return {"start": None, "end": None}
+            
+            start_str = parts[0].strip()
+            end_str = parts[1].strip()
+            
+            start_seconds = self._time_str_to_seconds(start_str)
+            end_seconds = self._time_str_to_seconds(end_str)
+            
+            return {"start": start_seconds, "end": end_seconds}
+        except Exception:
+            return {"start": None, "end": None}
+
+    def _time_str_to_seconds(self, time_str: str) -> float:
+        """
+        Convert time string "HH:MM:SS.mmm" to seconds since midnight.
+        
+        :param time_str: Time string
+        :return: Seconds since midnight (float)
+        """
+        time_str = time_str.strip()
+        parts = time_str.split(":")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid time format: {time_str}")
+        
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        seconds = float(parts[2])
+        
+        return hours * 3600 + minutes * 60 + seconds
+
+    def _format_time(self, seconds: Optional[float]) -> str:
+        """
+        Convert seconds since midnight back to "HH:MM:SS.mmm" format.
+        
+        :param seconds: Seconds since midnight (float or None)
+        :return: Time string in "HH:MM:SS.mmm" format
+        """
+        if seconds is None:
+            return "00:00:00.000"
+        
+        hours = int(seconds // 3600)
+        remaining = seconds - (hours * 3600)
+        minutes = int(remaining // 60)
+        secs = remaining - (minutes * 60)
+        
+        return f"{hours:02d}:{minutes:02d}:{secs:06.3f}"
 
     # ------------------------------------------------------------------
     # STT result polling

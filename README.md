@@ -214,7 +214,8 @@ You also need to download a **Vosk model** (e.g., Italian or English).
 ### 1. Clone the repository
 
 ```bash
-git clone git@github.com:Daedalo98/Speech-To-Text_withGUI.git
+git clone git@github.com:Daedalo98/Speech-To-Text_withGUI.git # with SSH connection
+git clone https://github.com/Daedalo98/Speech-To-Text_withGUI # as external user
 cd Speech-To-Text_withGUI
 ```
 
