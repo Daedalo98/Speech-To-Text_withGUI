@@ -23,7 +23,12 @@ from datetime import datetime
 from typing import Optional
 
 import tkinter as tk
-from tkinter import messagebox, filedialog
+from tkinter import ttk, filedialog, messagebox
+from pathlib import Path
+
+from stt_gui.config import settings
+from stt_gui.stt.vosk_engine import VoskEngine, STTResult
+
 
 from ..audio.audio_stream import AudioStream
 from ..config.settings import (
@@ -31,6 +36,7 @@ from ..config.settings import (
     GUI_POLL_INTERVAL_MS,
 )
 from ..stt.vosk_engine import STTResult, VoskEngine
+from .model_manager import ModelManager
 from .notes_panel import NotesPanel
 from .speaker_manager import SpeakerManager
 from .transcription_panel import TranscriptionPanel
@@ -40,8 +46,7 @@ class SpeechToTextApp(tk.Frame):
     """
     Main application GUI frame that embeds all panels.
     """
-
-    def __init__(self, master: Optional[tk.Misc] = None, **kwargs) -> None:
+    def __init__(self, master=None, **kwargs) -> None:
         """
         Initialize the application frame.
 
@@ -50,13 +55,19 @@ class SpeechToTextApp(tk.Frame):
         """
         super().__init__(master, **kwargs)
 
-        # Queues for audio and recognition results.
-        self._audio_queue: "queue.Queue[bytes]" = queue.Queue(maxsize=20)
-        self._result_queue: "queue.Queue[STTResult]" = queue.Queue()
+        # Model path selected by user (updated by ModelManager callback).
+        self._model_path: Optional[Path] = DEFAULT_VOSK_MODEL_PATH
 
         # Audio and STT engine instances (created lazily on start).
         self._audio_stream: Optional[AudioStream] = None
         self._vosk_engine: Optional[VoskEngine] = None
+
+        # Queues for audio and results, shared with VoskEngine
+        self._audio_queue: "queue.Queue[bytes]" = queue.Queue()
+        self._result_queue: "queue.Queue[STTResult]" = queue.Queue()
+
+        # Engine starts as None, only created after a model is selected
+        self._engine: Optional[VoskEngine] = None
 
         # State flag to know if we are currently recording.
         self._is_running = False
@@ -79,7 +90,7 @@ class SpeechToTextApp(tk.Frame):
         Build the three main sections of the application.
         """
         # Use a horizontal layout:
-        #   [left: speaker manager + transcription]
+        #   [left: model selector + speaker manager + transcription]
         #   [right: notes panel]
         left_frame = tk.Frame(self)
         left_frame.pack(side="left", fill="both", expand=True)
@@ -87,7 +98,14 @@ class SpeechToTextApp(tk.Frame):
         right_frame = tk.Frame(self)
         right_frame.pack(side="right", fill="both", expand=False)
 
-        # Top: speaker manager (with Start/Stop and Export).
+        # Top: model manager (for selecting Vosk model).
+        self.model_manager = ModelManager(
+            left_frame,
+            on_model_selected=self._on_model_selected,
+        )
+        self.model_manager.pack(fill="x", padx=4, pady=4)
+
+        # Upper-middle: speaker manager (with Start/Stop and Export).
         self.speaker_manager = SpeakerManager(
             left_frame,
             on_active_speaker_changed=self._on_active_speaker_changed,
@@ -117,6 +135,14 @@ class SpeechToTextApp(tk.Frame):
     # ------------------------------------------------------------------
     # Speaker & note callbacks
     # ------------------------------------------------------------------
+    def _on_model_selected(self, model_path: Path) -> None:
+        """
+        Callback from ModelManager when the user selects a model.
+
+        :param model_path: Path to the selected model directory.
+        """
+        self._model_path = model_path
+
     def _on_active_speaker_changed(self, name: str, color: str) -> None:
         """
         Callback from SpeakerManager when active speaker changes.
@@ -187,12 +213,11 @@ class SpeechToTextApp(tk.Frame):
             self.speaker_manager.set_active_speaker(first)
 
         # Check that the Vosk model path exists.
-        if not DEFAULT_VOSK_MODEL_PATH.exists():
+        if not self._model_path or not self._model_path.exists():
             messagebox.showerror(
                 "Vosk Model Missing",
-                f"Vosk model not found at:\n{DEFAULT_VOSK_MODEL_PATH}\n\n"
-                "Please download and extract a model, then update "
-                "settings.py accordingly.",
+                f"Vosk model not found at:\n{self._model_path}\n\n"
+                "Please select a valid model from the model dropdown.",
                 parent=self,
             )
             return
@@ -221,7 +246,7 @@ class SpeechToTextApp(tk.Frame):
                 # Create Vosk engine if not done yet.
                 if self._vosk_engine is None:
                     self._vosk_engine = VoskEngine(
-                        model_path=DEFAULT_VOSK_MODEL_PATH,
+                        model_path=self._model_path,
                         audio_queue=self._audio_queue,
                         result_queue=self._result_queue,
                     )

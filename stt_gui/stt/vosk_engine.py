@@ -19,7 +19,6 @@ from typing import Optional
 
 from vosk import Model, KaldiRecognizer
 
-
 @dataclass
 class STTResult:
     """

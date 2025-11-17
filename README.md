@@ -223,7 +223,7 @@ cd Speech-To-Text_withGUI
 ### 2. Create and activate a virtual environment
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate       # Linux/macOS
 # .venv\Scripts\Activate.ps1    # Windows PowerShell
 ```
@@ -279,7 +279,7 @@ Save the file.
 From the project root (with the virtualenv active):
 
 ```bash
-python -m scripts.run_app
+python3 -m scripts.run_app
 ```
 
 This will open the GUI window.
